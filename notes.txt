@@ -1,0 +1,3 @@
+# the main groups of interst
+base_atom_names[:, 0, :] = ['C', 'CA', 'N']
+base_atom_names[:, 3, :] = ['CA', 'C', 'O']
