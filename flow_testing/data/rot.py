@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Rotation:
     """
     Class that contains the rotation of a rigid protein.
@@ -10,3 +11,4 @@ class Rotation:
 
     def __call__(self):
         return self.rot_matrix
+    
