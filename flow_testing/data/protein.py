@@ -83,7 +83,6 @@ class Protein:
 
         return template
 
-
     def to_pdb(self, pdb_path: str):
         """
         Save the protein to a PDB file.
