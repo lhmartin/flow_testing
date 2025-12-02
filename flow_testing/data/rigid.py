@@ -44,6 +44,20 @@ class Rigid:
     def __call__(self):
         return self.trans, self.rot
 
+    def invert(self):
+        inverted_rot = self.rot.invert()
+        inverted_trans = -1 * inverted_rot.apply(self.trans)
+        return Rigid(inverted_trans, inverted_rot)
+
+    def apply(self, vector: np.ndarray):
+        """
+        Apply the rigid transformation to a vector.
+        Expected shape: [..., 3]
+        Returns:
+            np.ndarray: The transformed vector.
+            Shape: [..., 3]
+        """
+        return self.rot.apply(vector) + self.trans
 
 if __name__ == "__main__":
     print('AAAAAAAAAA')

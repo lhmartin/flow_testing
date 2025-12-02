@@ -3,6 +3,7 @@ from flow_testing.data.protein_constants import PDB_CHAIN_IDS, restype_1to3, res
 from biotite.structure import AtomArray, residue_iter
 from dataclasses import dataclass
 import numpy as np
+import torch
 
 from flow_testing.data.rigid import Rigid, matrix_to_rigids
 
@@ -91,8 +92,7 @@ class Protein:
 
     def to_bb_rigid(self, center : bool = True) -> Rigid:
         """
-        Convert the protein to a Rigid object.
-        Using the backbone atoms.
+        Convert the protein to a Rigid object using the backbone atoms.
         ['C', 'CA', 'N']
         """
         # 0 -> N, 1 -> CA, 2 -> C
@@ -103,6 +103,33 @@ class Protein:
         rigid = matrix_to_rigids(bb_atoms)
 
         return rigid
+
+    def to_psi_sin_cos(self, center : bool = True) -> Rigid:
+        """
+        Calculate the sin and cos of the psi angle for each residue.
+        """
+        psi_atoms = self.atom_positions[:, [1, 2, 3], :]
+        if center:
+            psi_atoms = psi_atoms - np.mean(psi_atoms, axis=0)
+
+        rigid = matrix_to_rigids(psi_atoms)
+
+        oxygen_atom_rel_pos = rigid.invert().apply(psi_atoms[:, 2, :])
+
+        # extract out the y,z coordinates of the oxygen atom
+        oxygen_atom_y_z = np.stack([oxygen_atom_rel_pos[:, 2], oxygen_atom_rel_pos[:, 1]], axis=-1)
+
+        denom = np.sqrt(
+            np.sum(
+                np.square(oxygen_atom_y_z[:, 0]),
+                axis=-1,
+                keepdims=True
+            )
+            + 1e-8
+        )
+
+        return oxygen_atom_y_z / denom
+
         
 if __name__ == "__main__":
     fp = 'test-data/pdbs/9VYX.pdb'
@@ -114,3 +141,5 @@ if __name__ == "__main__":
     protein.to_pdb('test-data/pdbs/9VYX_converted.pdb')
     rigid = protein.to_bb_rigid()
     print(rigid)
+    psi_sin_cos = protein.to_psi_sin_cos()
+    print(psi_sin_cos)
