@@ -3,7 +3,6 @@ from flow_testing.data.protein_constants import PDB_CHAIN_IDS, restype_1to3, res
 from biotite.structure import AtomArray, residue_iter
 from dataclasses import dataclass
 import numpy as np
-import torch
 
 from flow_testing.data.rigid import Rigid, matrix_to_rigids
 
@@ -127,8 +126,9 @@ class Protein:
             )
             + 1e-8
         )
+        psi_sin_cos = oxygen_atom_y_z / denom
 
-        return oxygen_atom_y_z / denom
+        return psi_sin_cos
 
         
 if __name__ == "__main__":
