@@ -132,6 +132,7 @@ class Protein:
 
         
 if __name__ == "__main__":
+    from flow_testing.data.utils import calculate_backbone
     fp = 'test-data/pdbs/9VYX.pdb'
     bio_structure = bs_io.load_structure(fp)
     bs_io.save_structure('test-data/pdbs/9VYX_biotite.pdb', bio_structure)
@@ -139,7 +140,8 @@ if __name__ == "__main__":
     protein = Protein.from_pdb(fp)
     print(protein)
     protein.to_pdb('test-data/pdbs/9VYX_converted.pdb')
-    rigid = protein.to_bb_rigid()
+    rigid = protein.to_bb_rigid(center=False)
     print(rigid)
-    psi_sin_cos = protein.to_psi_sin_cos()
+    psi_sin_cos = protein.to_psi_sin_cos(center=False)
     print(psi_sin_cos)
+    backbone = calculate_backbone(rigid, psi_sin_cos)
