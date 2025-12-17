@@ -1,3 +1,4 @@
+from typing import Literal
 import biotite.structure.io as bs_io
 from flow_testing.data.protein_constants import PDB_CHAIN_IDS, restype_1to3, restype_name_to_atom14_names, restype_3to1, restypes
 from biotite.structure import AtomArray, residue_iter
@@ -28,6 +29,21 @@ class Protein:
         """
         structure = bs_io.load_structure(pdb_path, extra_fields=['b_factor'])
         return cls.from_biotite(structure)
+
+    @classmethod
+    def from_backbone(cls, backbone: np.ndarray):
+        """
+        Create a protein from a backbone matrix of positions.
+        Assumes each residue is an alanine.
+        """
+        aa_type = np.zeros(backbone.shape[0], dtype=int)
+        atom_positions = backbone
+        atom_names = np.array(['N', 'CA', 'C', 'O'], dtype=np.dtype('U6'))
+        atom_mask = np.ones((backbone.shape[0], 4), dtype=bool)
+        chain_ids = np.zeros((backbone.shape[0]), dtype=int)
+        residue_ids = np.arange(backbone.shape[0], dtype=int)
+        b_factors = np.zeros((backbone.shape[0]))
+        return cls(aa_type, atom_positions, atom_names, atom_mask, chain_ids, residue_ids, b_factors)
 
     @classmethod
     def from_biotite(cls, structure: AtomArray):
@@ -103,13 +119,40 @@ class Protein:
 
         return rigid
 
-    def to_psi_sin_cos(self, center : bool = True) -> Rigid:
+    def center(self, type: Literal['backbone', 'all'] = 'backbone'):
         """
-        Calculate the sin and cos of the psi angle for each residue.
+        Center the protein.
+        Args:
+            type: The type of center to use.
+                'backbone' : Center the backbone atoms.
+                'all' : Center all the atoms.
+        Returns:
+            self
+        """
+        if type == 'backbone':
+            ca_atoms = self.atom_positions[:, 1, :]
+            self.atom_positions = self.atom_positions - np.mean(ca_atoms, axis=0)
+            self.atom_positions[~self.atom_mask] = 0
+        elif type == 'all':
+            self.atom_positions = self.atom_positions - np.mean(self.atom_positions, axis=0)
+        return self
+
+    def to_psi_rigid(self, center : bool = True) -> Rigid:
+        """
+        Calculate the rigid frame of the psi angle for each residue.
         """
         psi_atoms = self.atom_positions[:, [1, 2, 3], :]
         if center:
             psi_atoms = psi_atoms - np.mean(psi_atoms, axis=0)
+
+        rigid = matrix_to_rigids(psi_atoms)
+        return rigid
+
+    def to_psi_sin_cos(self) -> Rigid:
+        """
+        Calculate the sin and cos of the psi angle for each residue.
+        """
+        psi_atoms = self.atom_positions[:, [1, 2, 3], :]
 
         rigid = matrix_to_rigids(psi_atoms)
 
@@ -120,7 +163,7 @@ class Protein:
 
         denom = np.sqrt(
             np.sum(
-                np.square(oxygen_atom_y_z[:, 0]),
+                np.square(oxygen_atom_y_z),
                 axis=-1,
                 keepdims=True
             )
@@ -130,18 +173,25 @@ class Protein:
 
         return psi_sin_cos
 
+
         
 if __name__ == "__main__":
     from flow_testing.data.utils import calculate_backbone
-    fp = 'test-data/pdbs/9VYX.pdb'
+    fp = '/home/luke/code/flow_testing/test-data/pdbs/8UVY.pdb'
     bio_structure = bs_io.load_structure(fp)
-    bs_io.save_structure('test-data/pdbs/9VYX_biotite.pdb', bio_structure)
+    bs_io.save_structure('test-data/pdbs/8UVY_biotite.pdb', bio_structure)
 
     protein = Protein.from_pdb(fp)
-    print(protein)
-    protein.to_pdb('test-data/pdbs/9VYX_converted.pdb')
-    rigid = protein.to_bb_rigid(center=False)
+    print(protein)  
+    protein.to_pdb('test-data/pdbs/8UVY_converted.pdb')
+    protein.center(type='backbone')
+    rigid = protein.to_bb_rigid()
     print(rigid)
-    psi_sin_cos = protein.to_psi_sin_cos(center=False)
+    psi_sin_cos = protein.to_psi_sin_cos()
     print(psi_sin_cos)
     backbone = calculate_backbone(rigid, psi_sin_cos)
+    print(backbone)
+    print(backbone.shape)
+
+    bb_protein = Protein.from_backbone(backbone)
+    bb_protein.to_pdb('test-data/pdbs/8UVY_backbone_converted.pdb')

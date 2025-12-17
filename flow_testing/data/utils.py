@@ -2,6 +2,24 @@ from re import I
 import numpy as np
 from flow_testing.data.rigid import Rigid
 from flow_testing.data.protein_constants import idealized_AA_positions, restype_1to3, restypes
+from flow_testing.data.rot import Rotation
+
+def psi_angles_to_rotation(psi_angles : np.ndarray):
+    """
+    Convert the psi angles to a rotation matrix.
+    psi_angles is a 2D array of shape [n, 2]
+    """
+    template = np.zeros((psi_angles.shape[0], 3, 3))
+
+    template[:, 0, 0] = 1
+    template[:, 1, 1] = psi_angles[:, 0]
+    template[:, 1, 2] = psi_angles[:, 1]
+    template[:, 2, 1] = -psi_angles[:, 1]
+    template[:, 2, 2] = psi_angles[:, 0]
+
+    return Rotation(template)
+
+
 
 def calculate_backbone(bb_rigid : Rigid, psi_angles : np.ndarray):
     """
@@ -30,12 +48,14 @@ def calculate_backbone(bb_rigid : Rigid, psi_angles : np.ndarray):
     idealized_positions = np.array([bb_atoms for i in aas])
 
     # apply the rigid frame to the idealized positions
-    for atom_type in range(3):
+    for atom_type in range(4):
         idealized_positions[:, atom_type, :] = bb_rigid.apply(idealized_positions[:, atom_type, :])
 
     # need to place the O atom.
     
+    oxygen_rotation = psi_angles_to_rotation(psi_angles)
 
+    idealized_positions[:, 3, :] = oxygen_rotation.apply(idealized_positions[:, 3, :])
 
     # return the idealized positions
     return idealized_positions
