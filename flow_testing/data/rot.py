@@ -15,15 +15,64 @@ class Rotation:
     def invert(self) -> 'Rotation':
         return Rotation(self.rot_matrix.transpose(0, 2, 1))
 
-    def apply(self, vector: np.ndarray):
+    def apply(self, vectors: np.ndarray):
         """
-        Apply the rotation to a vector.
-        Expected shape: [..., 3]
+        Rotate a batch of vectors by a batch of rotation matrices.
+        
+        Parameters:
+        -----------
+        vectors : np.ndarray
+            Array of shape (N, 3) or (N, D) where N is the number of vectors
+            and D is the dimensionality (typically 3 for 3D rotation)
+        rotation_matrices : np.ndarray
+            Array of shape (N, D, D) where N is the number of rotation matrices
+            and D x D is the size of each rotation matrix
+        
         Returns:
-            np.ndarray: The rotated vector.
-            Shape: [..., 3]
+        --------
+        rotated_vectors : np.ndarray
+            Array of shape (N, D) containing the rotated vectors
+        
+        Examples:
+        ---------
+        >>> # Rotate 5 3D vectors by 5 rotation matrices
+        >>> vectors = np.random.randn(5, 3)
+        >>> rotation_matrices = np.random.randn(5, 3, 3)
+        >>> rotated = rotate_vectors(vectors, rotation_matrices)
+        >>> rotated.shape
+        (5, 3)
         """
-        assert vector.shape[-1] == 3, "Vector must be a 3D vector"
-        # assert same first dimension as the vector
-        assert vector.shape[0] == self.rot_matrix.shape[0], "First dimension of vector and rotation matrix must match"
-        return np.einsum('ijk,ik->ij', self.rot_matrix, vector)
+        # Validate inputs
+        if vectors.ndim != 2:
+            raise ValueError(f"vectors must be 2D array, got shape {vectors.shape}")
+        
+        if self.rot_matrix.ndim != 3:
+            raise ValueError(f"rotation_matrices must be 3D array, got shape {self.rot_matrix.shape}")
+        
+        N, D = vectors.shape
+        N_rot, D_rot1, D_rot2 = self.rot_matrix.shape
+        
+        if N != N_rot:
+            raise ValueError(f"Number of vectors ({N}) must match number of rotation matrices ({N_rot})")
+        
+        if D != D_rot1 or D != D_rot2:
+            raise ValueError(f"Vector dimension ({D}) must match rotation matrix dimensions ({D_rot1}x{D_rot2})")
+        
+        rotated_vectors = np.einsum('nij,nj->ni', self.rot_matrix, vectors)
+        
+        return rotated_vectors
+
+    def compose(self, other: 'Rotation'):
+        """
+        Compose two rotations in to a new rotation.
+        Expected shape: [n, 3, 3]
+        NOTE: Order of composition is self * other.
+        Args:
+            other: The other rotation to compose with.
+            Expected shape: [n, 3, 3]
+        Returns:
+            Rotation: The composed rotation.
+            Expected shape: [n, 3, 3]
+        """
+        new_rotation = np.einsum('njk,nkl->njl', self.rot_matrix, other.rot_matrix)
+        return Rotation(new_rotation)

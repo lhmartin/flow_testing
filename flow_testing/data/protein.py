@@ -36,13 +36,29 @@ class Protein:
         Create a protein from a backbone matrix of positions.
         Assumes each residue is an alanine.
         """
-        aa_type = np.zeros(backbone.shape[0], dtype=int)
-        atom_positions = backbone
-        atom_names = np.array(['N', 'CA', 'C', 'O'], dtype=np.dtype('U6'))
-        atom_mask = np.ones((backbone.shape[0], 4), dtype=bool)
-        chain_ids = np.zeros((backbone.shape[0]), dtype=int)
-        residue_ids = np.arange(backbone.shape[0], dtype=int)
-        b_factors = np.zeros((backbone.shape[0]))
+        num_residues = backbone.shape[0]
+
+        atom_positions = np.zeros((num_residues, 14, 3))
+        aa_type = np.zeros(num_residues, dtype=int)
+        atom_names =  np.zeros((num_residues, 14), dtype=np.dtype('U6'))
+        atom_mask = np.ones((num_residues, 14), dtype=bool)
+        chain_ids = np.zeros((num_residues), dtype=int)
+        residue_ids = np.arange(num_residues, dtype=int)
+        b_factors = np.zeros((num_residues))
+
+        for i in range(num_residues):
+            atom_names[i, :] = restype_name_to_atom14_names['ALA']
+            atom_mask[i, :] = atom_names[i, :] != ''
+        
+            chain_ids[i] = 0
+            residue_ids[i] = i
+            b_factors[i] = 0
+            aa_type[i] = restypes.index('A')
+            atom_positions[i, :, :][atom_mask[i, :]] = backbone[i, :, :]
+
+            # swap O and Cb atoms
+            atom_positions[i, 3, :], atom_positions[i, 4, :] = backbone[i, 4, :], backbone[i, 3, :]
+
         return cls(aa_type, atom_positions, atom_names, atom_mask, chain_ids, residue_ids, b_factors)
 
     @classmethod
@@ -172,8 +188,6 @@ class Protein:
         psi_sin_cos = oxygen_atom_y_z / denom
 
         return psi_sin_cos
-
-
         
 if __name__ == "__main__":
     from flow_testing.data.utils import calculate_backbone
@@ -182,9 +196,9 @@ if __name__ == "__main__":
     bs_io.save_structure('test-data/pdbs/8UVY_biotite.pdb', bio_structure)
 
     protein = Protein.from_pdb(fp)
-    print(protein)  
-    protein.to_pdb('test-data/pdbs/8UVY_converted.pdb')
+    print(protein)
     protein.center(type='backbone')
+    protein.to_pdb('test-data/pdbs/8UVY_converted.pdb')
     rigid = protein.to_bb_rigid()
     print(rigid)
     psi_sin_cos = protein.to_psi_sin_cos()
@@ -195,3 +209,4 @@ if __name__ == "__main__":
 
     bb_protein = Protein.from_backbone(backbone)
     bb_protein.to_pdb('test-data/pdbs/8UVY_backbone_converted.pdb')
+    print("Done")

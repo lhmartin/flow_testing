@@ -1,4 +1,3 @@
-from re import I
 import numpy as np
 from flow_testing.data.rigid import Rigid
 from flow_testing.data.protein_constants import idealized_AA_positions, restype_1to3, restypes
@@ -18,7 +17,6 @@ def psi_angles_to_rotation(psi_angles : np.ndarray):
     template[:, 2, 2] = psi_angles[:, 0]
 
     return Rotation(template)
-
 
 
 def calculate_backbone(bb_rigid : Rigid, psi_angles : np.ndarray):
@@ -42,22 +40,33 @@ def calculate_backbone(bb_rigid : Rigid, psi_angles : np.ndarray):
     aas = np.zeros(psi_angles.shape[0], dtype=int)
 
     ideal_amino_acid = idealized_AA_positions[restype_1to3[restypes[0]]]
-    bb_atoms = np.stack([list(ideal_amino_acid[x][2]) for x in range(4)])
+    bb_atoms = np.stack([list(ideal_amino_acid[x][2]) for x in range(5)])
 
     # create a template array of the idealized positions
-    idealized_positions = np.array([bb_atoms for i in aas])
+    idealized_positions = np.array([bb_atoms for _ in aas])
 
     # apply the rigid frame to the idealized positions
     for atom_type in range(4):
         idealized_positions[:, atom_type, :] = bb_rigid.apply(idealized_positions[:, atom_type, :])
 
-    # need to place the O atom.
-    
     oxygen_rotation = psi_angles_to_rotation(psi_angles)
+    
+    # repeat the translation vector for each residue
+    oxy_trans = np.array([1.526, 0, 0])[None, :].repeat(psi_angles.shape[0], axis=0)
 
-    idealized_positions[:, 3, :] = oxygen_rotation.apply(idealized_positions[:, 3, :])
+    oxy_rigid = Rigid(oxy_trans, oxygen_rotation)
 
-    # return the idealized positions
+    # Extract the idealized position of the O atom
+    o_atom_position = idealized_positions[:, 4, :]
+
+    # first combine the base rigid and the oxygen rigid
+    combined_rigid = bb_rigid.compose(oxy_rigid)
+
+    # apply the combined rigid to the oxygen atom position
+    o_atom_position = combined_rigid.apply(o_atom_position)
+
+    idealized_positions[:, 4, :] = o_atom_position
+
     return idealized_positions
 
 

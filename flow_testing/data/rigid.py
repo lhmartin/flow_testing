@@ -21,11 +21,12 @@ def matrix_to_rigids(matrix: np.ndarray) -> 'Rigid':
     rots = []
 
     for (v1, v2) in zip(v1s, v2s):
-        e1 = v1 / np.linalg.norm(v1, axis=-1, keepdims=True)
-        u2 = v2 - e1 * (e1.T * v2)
-        e2 = v2 / np.linalg.norm(u2, axis=-1, keepdims=True)
-        e3 = np.cross(e1, e2, axis=-1)
-        rots.append(np.stack([e1, e2, e3], axis=-1))
+        e1 = v1 / np.linalg.norm(v1)
+        u2 = v2 - np.dot(e1, v2) * e1
+        e2 = u2 / np.linalg.norm(u2)
+        e3 = np.cross(e1, e2)
+        rot_matrix = np.stack([e1, e2, e3], axis=0)
+        rots.append(rot_matrix)
 
     rot = Rotation(np.stack(rots, axis=0))
     trans = basis_vectors
@@ -58,6 +59,15 @@ class Rigid:
             Shape: [..., 3]
         """
         return self.rot.apply(vector) + self.trans
+
+    def compose(self, other: 'Rigid'):
+        """
+        Compose two rigid transformations.
+        """
+        new_rotation = self.rot.compose(other.rot)
+        new_trans = self.rot.apply(other.trans) + self.trans
+        
+        return Rigid(new_trans, new_rotation)
 
 if __name__ == "__main__":
     print('AAAAAAAAAA')
