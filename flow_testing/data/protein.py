@@ -175,7 +175,7 @@ class Protein:
         oxygen_atom_rel_pos = rigid.invert().apply(psi_atoms[:, 2, :])
 
         # extract out the y,z coordinates of the oxygen atom
-        oxygen_atom_y_z = np.stack([oxygen_atom_rel_pos[:, 2], oxygen_atom_rel_pos[:, 1]], axis=-1)
+        oxygen_atom_y_z = np.stack([oxygen_atom_rel_pos[:, 1], oxygen_atom_rel_pos[:, 2]], axis=-1)
 
         denom = np.sqrt(
             np.sum(

@@ -19,8 +19,9 @@ def matrix_to_rigids(matrix: np.ndarray) -> 'Rigid':
     v2s = matrix[:, 2, :] - basis_vectors
 
     rots = []
+    trans = []
 
-    for (v1, v2) in zip(v1s, v2s):
+    for i, (v1, v2) in enumerate(zip(v1s, v2s)):
         e1 = v1 / np.linalg.norm(v1)
         u2 = v2 - np.dot(e1, v2) * e1
         e2 = u2 / np.linalg.norm(u2)
@@ -28,8 +29,10 @@ def matrix_to_rigids(matrix: np.ndarray) -> 'Rigid':
         rot_matrix = np.stack([e1, e2, e3], axis=0)
         rots.append(rot_matrix)
 
+        trans.append(-(rot_matrix @ basis_vectors[i]))
+
     rot = Rotation(np.stack(rots, axis=0))
-    trans = basis_vectors
+    trans = np.stack(trans, axis=0)
 
     return Rigid(trans, rot)
 

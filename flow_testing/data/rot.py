@@ -6,14 +6,14 @@ class Rotation:
     Class that contains the rotation of a rigid protein.
     """
 
-    def __init__(self, rot_matrix: np.ndarray):
-        self.rot_matrix = rot_matrix
+    def __init__(self, rot_mats: np.ndarray):
+        self.rot_mats = rot_mats
 
     def __call__(self):
-        return self.rot_matrix
+        return self.rot_mats
     
     def invert(self) -> 'Rotation':
-        return Rotation(self.rot_matrix.transpose(0, 2, 1))
+        return Rotation(self.rot_mats.transpose(0, 2, 1))
 
     def apply(self, vectors: np.ndarray):
         """
@@ -46,11 +46,11 @@ class Rotation:
         if vectors.ndim != 2:
             raise ValueError(f"vectors must be 2D array, got shape {vectors.shape}")
         
-        if self.rot_matrix.ndim != 3:
-            raise ValueError(f"rotation_matrices must be 3D array, got shape {self.rot_matrix.shape}")
+        if self.rot_mats.ndim != 3:
+            raise ValueError(f"rotation_matrices must be 3D array, got shape {self.rot_mats.shape}")
         
         N, D = vectors.shape
-        N_rot, D_rot1, D_rot2 = self.rot_matrix.shape
+        N_rot, D_rot1, D_rot2 = self.rot_mats.shape
         
         if N != N_rot:
             raise ValueError(f"Number of vectors ({N}) must match number of rotation matrices ({N_rot})")
@@ -58,7 +58,7 @@ class Rotation:
         if D != D_rot1 or D != D_rot2:
             raise ValueError(f"Vector dimension ({D}) must match rotation matrix dimensions ({D_rot1}x{D_rot2})")
         
-        rotated_vectors = np.einsum('nij,nj->ni', self.rot_matrix, vectors)
+        rotated_vectors = np.einsum('nij,nj->ni', self.rot_mats, vectors)
         
         return rotated_vectors
 
@@ -74,5 +74,5 @@ class Rotation:
             Rotation: The composed rotation.
             Expected shape: [n, 3, 3]
         """
-        new_rotation = np.einsum('njk,nkl->njl', self.rot_matrix, other.rot_matrix)
+        new_rotation = np.einsum('njk,nkl->njl', self.rot_mats, other.rot_mats)
         return Rotation(new_rotation)

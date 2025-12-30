@@ -11,10 +11,10 @@ def psi_angles_to_rotation(psi_angles : np.ndarray):
     template = np.zeros((psi_angles.shape[0], 3, 3))
 
     template[:, 0, 0] = 1
-    template[:, 1, 1] = psi_angles[:, 0]
-    template[:, 1, 2] = psi_angles[:, 1]
-    template[:, 2, 1] = -psi_angles[:, 1]
-    template[:, 2, 2] = psi_angles[:, 0]
+    template[:, 1, 1] = psi_angles[:, 1]
+    template[:, 1, 2] = -psi_angles[:, 0]
+    template[:, 2, 1] = psi_angles[:, 0]
+    template[:, 2, 2] = psi_angles[:, 1]
 
     return Rotation(template)
 
@@ -38,39 +38,32 @@ def calculate_backbone(bb_rigid : Rigid, psi_angles : np.ndarray):
     # apply the rigid frame to the idealized positions
     # set the AA type to Alanine as this is just an idealised backbone
     aas = np.zeros(psi_angles.shape[0], dtype=int)
+    n_residues = psi_angles.shape[0]
 
     ideal_amino_acid = idealized_AA_positions[restype_1to3[restypes[0]]]
-    bb_atoms = np.stack([list(ideal_amino_acid[x][2]) for x in range(5)])
+    bb_atoms_ideal = np.stack([list(ideal_amino_acid[x][2]) for x in range(5)])
 
     # create a template array of the idealized positions
-    idealized_positions = np.array([bb_atoms for _ in aas])
+    backbone = np.zeros((n_residues, 5, 3))
 
     # apply the rigid frame to the idealized positions
-    for atom_type in range(4):
-        idealized_positions[:, atom_type, :] = bb_rigid.apply(idealized_positions[:, atom_type, :])
+    for atom_idx in range(4):
+        ideal_pos = np.tile(bb_atoms_ideal[atom_idx], (n_residues, 1))
+        backbone[:, atom_idx, :] = bb_rigid.invert().apply(ideal_pos)
 
-    oxygen_rotation = psi_angles_to_rotation(psi_angles)
+    psi_rotation = psi_angles_to_rotation(psi_angles)
     
     # repeat the translation vector for each residue
-    oxy_trans = np.array([1.526, 0, 0])[None, :].repeat(psi_angles.shape[0], axis=0)
+    o_ideal = np.tile(bb_atoms_ideal[4], (n_residues, 1))
+    oxy_trans = np.array([1.526, 0, 0])[None, :].repeat(n_residues, axis=0)
+    oxy_rigid = Rigid(oxy_trans, psi_rotation)
 
-    oxy_rigid = Rigid(oxy_trans, oxygen_rotation)
-
-    # Extract the idealized position of the O atom
-    o_atom_position = idealized_positions[:, 4, :]
-
-    # first combine the base rigid and the oxygen rigid
     combined_rigid = bb_rigid.compose(oxy_rigid)
 
-    # apply the combined rigid to the oxygen atom position
-    o_atom_position = combined_rigid.apply(o_atom_position)
+    # Apply combined rigid to oxygen position (relative to C)
+    o_atom_position = combined_rigid.invert().apply(o_ideal)
 
-    idealized_positions[:, 4, :] = o_atom_position
+    # Extract the idealized position of the O atom
+    backbone[:, 4, :] = o_atom_position
 
-    return idealized_positions
-
-
-
-
-
-    
+    return backbone
