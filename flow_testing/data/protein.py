@@ -153,26 +153,15 @@ class Protein:
             self.atom_positions = self.atom_positions - np.mean(self.atom_positions, axis=0)
         return self
 
-    def to_psi_rigid(self, center : bool = True) -> Rigid:
-        """
-        Calculate the rigid frame of the psi angle for each residue.
-        """
-        psi_atoms = self.atom_positions[:, [1, 2, 3], :]
-        if center:
-            psi_atoms = psi_atoms - np.mean(psi_atoms, axis=0)
-
-        rigid = matrix_to_rigids(psi_atoms)
-        return rigid
-
     def to_psi_sin_cos(self) -> Rigid:
         """
         Calculate the sin and cos of the psi angle for each residue.
         """
-        psi_atoms = self.atom_positions[:, [1, 2, 3], :]
+        psi_atoms = self.atom_positions[:, [0, 1, 2], :]
 
         rigid = matrix_to_rigids(psi_atoms)
 
-        oxygen_atom_rel_pos = rigid.invert().apply(psi_atoms[:, 2, :])
+        oxygen_atom_rel_pos = rigid.invert().apply(self.atom_positions[:, 3, :])
 
         # extract out the y,z coordinates of the oxygen atom
         oxygen_atom_y_z = np.stack([oxygen_atom_rel_pos[:, 1], oxygen_atom_rel_pos[:, 2]], axis=-1)
