@@ -127,7 +127,6 @@ class Protein:
         Convert the protein to a Rigid object using the backbone atoms.
         ['C', 'CA', 'N']
         """
-        # 0 -> N, 1 -> CA, 2 -> C
         bb_atoms = self.atom_positions[:, [2, 1, 0], :]
         if center:
             bb_atoms = bb_atoms - np.mean(bb_atoms, axis=0)
@@ -160,7 +159,7 @@ class Protein:
         The psi angle is measured in the psi frame coordinate system.
         """
         # Create backbone rigid frames from N, CA, C
-        psi_atoms = self.atom_positions[:, [0, 1, 2], :]  # N, CA, C
+        psi_atoms = self.atom_positions[:, [2, 1, 0], :]  # N, CA, C
         bb_rigid = matrix_to_rigids(psi_atoms)
         
         # Default psi frame transformation (from DEFAULT_FRAMES frame 3)
@@ -184,30 +183,30 @@ class Protein:
         oxygen_atom_rel_pos = psi_frame.invert().apply(self.atom_positions[:, 3, :])
         
         # Extract y,z coordinates in psi frame (rotation is around x-axis)
-        oxygen_atom_y_z = np.stack([oxygen_atom_rel_pos[:, 1], oxygen_atom_rel_pos[:, 2]], axis=-1)
+        oxygen_atom_z_y= np.stack([oxygen_atom_rel_pos[:, 2], oxygen_atom_rel_pos[:, 1]], axis=-1)
         
         denom = np.sqrt(
             np.sum(
-                np.square(oxygen_atom_y_z),
+                np.square(oxygen_atom_z_y),
                 axis=-1,
                 keepdims=True
             )
             + 1e-8
         )
-        psi_sin_cos = oxygen_atom_y_z / denom
+        psi_sin_cos = oxygen_atom_z_y / denom
         
         return psi_sin_cos
         
 if __name__ == "__main__":
     from flow_testing.data.utils import calculate_backbone
-    fp = '/home/luke/code/flow_testing/test-data/pdbs/8UVY.pdb'
+    fp = '/home/luke/code/flow_testing/test-data/pdbs/9VYX.pdb'
     bio_structure = bs_io.load_structure(fp)
-    bs_io.save_structure('test-data/pdbs/8UVY_biotite.pdb', bio_structure)
+    bs_io.save_structure('test-data/pdbs/9VYX_biotite.pdb', bio_structure)
 
     protein = Protein.from_pdb(fp)
     print(protein)
     protein.center(type='backbone')
-    protein.to_pdb('test-data/pdbs/8UVY_converted.pdb')
+    protein.to_pdb('test-data/pdbs/9VYX_converted.pdb')
     rigid = protein.to_bb_rigid()
     print(rigid)
     psi_sin_cos = protein.to_psi_sin_cos()
@@ -217,5 +216,5 @@ if __name__ == "__main__":
     print(backbone.shape)
 
     bb_protein = Protein.from_backbone(backbone)
-    bb_protein.to_pdb('test-data/pdbs/8UVY_backbone_converted.pdb')
+    bb_protein.to_pdb('test-data/pdbs/9VYX_backbone_converted.pdb')
     print("Done")
