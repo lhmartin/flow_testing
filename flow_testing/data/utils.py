@@ -34,15 +34,14 @@ def calculate_backbone_2(bb_rigid : Rigid, psi_angles : np.ndarray):
         ideal_pos = np.tile(bb_atoms_ideal[atom_idx], (n_residues, 1))
         backbone[:, atom_idx, :] = bb_rigid.invert().apply(ideal_pos)
 
-    # Default frame 2 transformation for the psi group (from DEFAULT_FRAMES)
+    # Default frame 3 transformation for the psi group
     default_rot = np.array([
-        [-0.3594,  0.9332,  0.0000],
-        [ 0.9332,  0.3594,  0.0000],
+        [ 1.0000,  0.0000,  0.0000],
+        [ 0.0000, -1.0000,  0.0000],
         [ 0.0000,  0.0000, -1.0000]
     ])
-    default_trans = np.array([-0.5250, 1.3630, 0.0000])
+    default_trans = np.array([1.5260, 0.0000, 0.0000])
     
-    # Create default psi frame rigid (same for all residues)
     default_psi_rigid = Rigid(
         np.tile(default_trans, (n_residues, 1)),
         Rotation(np.tile(default_rot[None, :, :], (n_residues, 1, 1)))
@@ -55,12 +54,12 @@ def calculate_backbone_2(bb_rigid : Rigid, psi_angles : np.ndarray):
     # Compose: default_frame → psi_rotation
     psi_frame = default_psi_rigid.compose(psi_rot_rigid)
     
-    # Compose with backbone frame
-    combined_rigid = bb_rigid.invert().compose(psi_frame)
+    # Try using bb_rigid instead of bb_rigid.invert()
+    combined_rigid = bb_rigid.compose(psi_frame)
     
     # Apply to oxygen position
     o_ideal = np.tile(bb_atoms_ideal[4], (n_residues, 1))
-    backbone[:, 4, :] = combined_rigid.apply(o_ideal)
+    backbone[:, 4, :] = combined_rigid.invert().apply(o_ideal)
 
     return backbone
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from flow_testing.data.rigid import Rigid, matrix_to_rigids
+from flow_testing.data.rot import Rotation
 
 @dataclass
 class Protein:
@@ -153,19 +154,38 @@ class Protein:
             self.atom_positions = self.atom_positions - np.mean(self.atom_positions, axis=0)
         return self
 
-    def to_psi_sin_cos(self) -> Rigid:
+    def to_psi_sin_cos(self) -> np.ndarray:
         """
         Calculate the sin and cos of the psi angle for each residue.
+        The psi angle is measured in the psi frame coordinate system.
         """
-        psi_atoms = self.atom_positions[:, [0, 1, 2], :]
-
-        rigid = matrix_to_rigids(psi_atoms)
-
-        oxygen_atom_rel_pos = rigid.invert().apply(self.atom_positions[:, 3, :])
-
-        # extract out the y,z coordinates of the oxygen atom
+        # Create backbone rigid frames from N, CA, C
+        psi_atoms = self.atom_positions[:, [0, 1, 2], :]  # N, CA, C
+        bb_rigid = matrix_to_rigids(psi_atoms)
+        
+        # Default psi frame transformation (from DEFAULT_FRAMES frame 3)
+        n_residues = self.atom_positions.shape[0]
+        default_rot = np.array([
+            [ 1.0000,  0.0000,  0.0000],
+            [ 0.0000, -1.0000,  0.0000],
+            [ 0.0000,  0.0000, -1.0000]
+        ])
+        default_trans = np.array([1.5260, 0.0000, 0.0000])
+        
+        default_psi_rigid = Rigid(
+            np.tile(default_trans, (n_residues, 1)),
+            Rotation(np.tile(default_rot[None, :, :], (n_residues, 1, 1)))
+        )
+        
+        # Combined transformation: backbone -> psi frame
+        psi_frame = bb_rigid.invert().compose(default_psi_rigid)
+        
+        # Transform oxygen into the psi frame coordinate system
+        oxygen_atom_rel_pos = psi_frame.invert().apply(self.atom_positions[:, 3, :])
+        
+        # Extract y,z coordinates in psi frame (rotation is around x-axis)
         oxygen_atom_y_z = np.stack([oxygen_atom_rel_pos[:, 1], oxygen_atom_rel_pos[:, 2]], axis=-1)
-
+        
         denom = np.sqrt(
             np.sum(
                 np.square(oxygen_atom_y_z),
@@ -175,7 +195,7 @@ class Protein:
             + 1e-8
         )
         psi_sin_cos = oxygen_atom_y_z / denom
-
+        
         return psi_sin_cos
         
 if __name__ == "__main__":
