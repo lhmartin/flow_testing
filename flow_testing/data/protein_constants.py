@@ -74,3 +74,5 @@ idealized_AA_positions = {
             ['O', 3, (0.627, 1.062, 0.000)], # psi-group
         ]
     }
+
+backbone_atoms = ['N', 'CA', 'C']
