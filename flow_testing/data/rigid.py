@@ -2,10 +2,11 @@ import numpy as np
 from flow_testing.data.rot import Rotation
 
 
-def matrix_to_rigids(matrix: np.ndarray) -> 'Rigid':
+def matrix_to_rigids_global_to_local(matrix: np.ndarray) -> 'Rigid':
 
     """
     Convert a matrix of 3D positions to a Rigid object.
+    This goes from the global coordinate system to the local coordinate system of the rigid body.
 
     Expected shape: [n, 3, 3]
     Where the first axis is the end of the v1 vector, 
@@ -35,6 +36,22 @@ def matrix_to_rigids(matrix: np.ndarray) -> 'Rigid':
     trans = np.stack(trans, axis=0)
 
     return Rigid(trans, rot)
+
+def matrix_to_rigids_local_to_global(matrix: np.ndarray) -> 'Rigid':
+
+    """
+    Convert a matrix of 3D positions to a Rigid object.
+    This goes from the local coordinate system of the rigid body to the global coordinate system.
+
+    Expected shape: [n, 3, 3]
+    Where the first axis is the end of the v1 vector, 
+    the second axis is the basis vector and the third axis is the end of the v2 vector.
+
+    Returns:
+        Rigid: A Rigid object.
+    """
+    rigid = matrix_to_rigids_global_to_local(matrix)
+    return rigid.invert()
 
 class Rigid:
     """

@@ -4,7 +4,7 @@ import torch
 
 class GaussianDistribution(Sampleable, torch.nn.Module):
     """
-    Class that represents a Gaussian Distribution.
+    Class that represents a sampleable Gaussian Distribution.
     """
 
     def __init__(self, mean: torch.Tensor, cov: torch.Tensor):
@@ -33,9 +33,29 @@ class GaussianDistribution(Sampleable, torch.nn.Module):
     def distribution(self) -> MultivariateNormal:
         return MultivariateNormal(self.mean, self.cov)
 
-class R3Flow(Sampleable, Flow):
-    def __init__(self, alpha : Alpha, beta : Beta):
+class R3Flow(Flow):
+    def __init__(self, alpha : Alpha, beta : Beta, distribution : GaussianDistribution):
         super().__init__(alpha, beta)
+        self.distribution = distribution
 
-    def sample(self, n_samples: int) -> torch.Tensor:
-        return self.alpha(self.beta.sample(n_samples))
+    @property
+    def dim(self) -> int:
+        return self.distribution.dim
+
+    def noise_sample(self, sample: torch.Tensor, time : float) -> torch.Tensor:
+        noise = self.distribution.sample(sample.shape[0])
+
+        alpha = self.alpha(time)
+        beta = self.beta(time)
+
+        return alpha * noise + beta * sample
+
+
+if __name__ == "__main__":
+    from flow_testing.flow.base import LinearAlpha, LinearBeta
+    
+    alpha = LinearAlpha()
+    beta = LinearBeta()
+    distribution = GaussianDistribution(mean=torch.zeros(3), cov=torch.eye(3))
+    flow = R3Flow(alpha, beta, distribution)
+    print(flow.noise_sample(sample=torch.zeros(10, 3), time=torch.tensor(0.5)))

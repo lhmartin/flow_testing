@@ -5,7 +5,7 @@ from biotite.structure import AtomArray, residue_iter
 from dataclasses import dataclass
 import numpy as np
 
-from flow_testing.data.rigid import Rigid, matrix_to_rigids
+from flow_testing.data.rigid import Rigid, matrix_to_rigids_local_to_global
 from flow_testing.data.rot import Rotation
 
 @dataclass
@@ -126,12 +126,14 @@ class Protein:
         """
         Convert the protein to a Rigid object using the backbone atoms.
         ['C', 'CA', 'N']
+
+        This goes from the local coordinate system of the backbone to the global coordinate system.
         """
         bb_atoms = self.atom_positions[:, [2, 1, 0], :]
         if center:
             bb_atoms = bb_atoms - np.mean(bb_atoms, axis=0)
 
-        rigid = matrix_to_rigids(bb_atoms)
+        rigid = matrix_to_rigids_local_to_global(bb_atoms)
 
         return rigid
 
@@ -160,7 +162,7 @@ class Protein:
         """
         # Create backbone rigid frames from N, CA, C
         psi_atoms = self.atom_positions[:, [2, 1, 0], :]  # N, CA, C
-        bb_rigid = matrix_to_rigids(psi_atoms)
+        bb_rigid = matrix_to_rigids_local_to_global(psi_atoms)
         
         # Default psi frame transformation (from DEFAULT_FRAMES frame 3)
         n_residues = self.atom_positions.shape[0]
@@ -177,7 +179,7 @@ class Protein:
         )
         
         # Combined transformation: backbone -> psi frame
-        psi_frame = bb_rigid.invert().compose(default_psi_rigid)
+        psi_frame = bb_rigid.compose(default_psi_rigid)
         
         # Transform oxygen into the psi frame coordinate system
         oxygen_atom_rel_pos = psi_frame.invert().apply(self.atom_positions[:, 3, :])

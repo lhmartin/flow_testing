@@ -32,7 +32,7 @@ def calculate_backbone(bb_rigid : Rigid, psi_angles : np.ndarray):
     # apply the rigid frame to the idealized positions for first 4 atoms
     for atom_idx in range(4):
         ideal_pos = np.tile(bb_atoms_ideal[atom_idx], (n_residues, 1))
-        backbone[:, atom_idx, :] = bb_rigid.invert().apply(ideal_pos)
+        backbone[:, atom_idx, :] = bb_rigid.apply(ideal_pos)
 
     # Default frame 3 transformation for the psi group
     default_rot = np.array([
@@ -53,7 +53,7 @@ def calculate_backbone(bb_rigid : Rigid, psi_angles : np.ndarray):
     
     # Compose: default_frame → psi_rotation
     psi_frame = default_psi_rigid.compose(psi_rot_rigid)  # psi_local → bb_local
-    combined_rigid = bb_rigid.invert().compose(psi_frame)  # psi_local → global
+    combined_rigid = bb_rigid.compose(psi_frame)  # psi_local → global
     o_ideal = np.tile(bb_atoms_ideal[4], (n_residues, 1))
     backbone[:, 4, :] = combined_rigid.apply(o_ideal)
 
