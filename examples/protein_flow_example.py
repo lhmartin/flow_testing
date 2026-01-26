@@ -6,12 +6,15 @@ This script:
 2. Extracts backbone rigid frames (rotation + translation)
 3. Applies R3 flow to translations (interpolates with Gaussian noise)
 4. Applies SO(3) flow to rotations (interpolates with random rotations)
-5. Reconstructs and saves the noised protein backbone
+5. Reconstructs backbone at 200 timesteps and saves as a single trajectory
 """
 
 import numpy as np
 import torch
 from pathlib import Path
+
+from biotite.structure import AtomArray, stack
+from biotite.structure.io.pdb import PDBFile
 
 from flow_testing.data.protein import Protein
 from flow_testing.data.rigid import Rigid
@@ -19,6 +22,9 @@ from flow_testing.data.rot import Rotation
 from flow_testing.data.utils import calculate_backbone
 from flow_testing.flow.base import LinearAlpha, LinearBeta
 from flow_testing.flow.r3_flow import R3Flow, GaussianDistribution
+
+# Number of timesteps for the flow trajectory
+NUM_TIMESTEPS = 200
 
 
 def random_rotation_matrices(n: int) -> np.ndarray:
@@ -125,29 +131,28 @@ class SO3Flow:
         self.alpha = LinearAlpha()
         self.beta = LinearBeta()
 
-    def noise_sample(self, rotation: Rotation, time: float) -> Rotation:
+    def sample_noise(self, n: int) -> np.ndarray:
+        """Sample random rotation matrices as noise target."""
+        return random_rotation_matrices(n)
+
+    def interpolate(self, rotation: Rotation, noise_rotations: np.ndarray, time: float) -> Rotation:
         """
-        Apply noise to rotation matrices using geodesic interpolation.
+        Interpolate between data rotations and pre-sampled noise rotations.
 
         Parameters:
         -----------
         rotation : Rotation
             The original rotation matrices
+        noise_rotations : np.ndarray
+            Pre-sampled noise rotation matrices, shape (n, 3, 3)
         time : float
             Time parameter in [0, 1]. At t=0, returns original; at t=1, returns noise.
 
         Returns:
         --------
         Rotation
-            Noised rotation matrices
+            Interpolated rotation matrices
         """
-        n = rotation.rot_mats.shape[0]
-
-        # Sample random rotations as noise
-        noise_rotations = random_rotation_matrices(n)
-
-        # Interpolate: at t=0 we want original, at t=1 we want noise
-        # Using alpha(t) for noise weight and beta(t) for data weight
         t_tensor = torch.tensor([time])
         alpha_t = float(self.alpha(t_tensor))
 
@@ -160,24 +165,31 @@ class SO3Flow:
 
         return Rotation(interpolated)
 
+    def noise_sample(self, rotation: Rotation, time: float) -> Rotation:
+        """
+        Apply noise to rotation matrices using geodesic interpolation.
+        (Convenience method that samples new noise each call)
+        """
+        n = rotation.rot_mats.shape[0]
+        noise_rotations = self.sample_noise(n)
+        return self.interpolate(rotation, noise_rotations, time)
 
-def apply_flow_to_protein(protein: Protein, time: float, output_dir: Path) -> Protein:
+
+def generate_flow_trajectory(protein: Protein, num_timesteps: int = NUM_TIMESTEPS) -> list[AtomArray]:
     """
-    Apply rotation and translation flow to a protein structure.
+    Generate a trajectory of protein structures along the flow from data to noise.
 
     Parameters:
     -----------
     protein : Protein
         Input protein structure
-    time : float
-        Flow time parameter in [0, 1]
-    output_dir : Path
-        Directory to save output files
+    num_timesteps : int
+        Number of timesteps in the trajectory
 
     Returns:
     --------
-    Protein
-        Protein with noised backbone coordinates
+    list[AtomArray]
+        List of AtomArray structures at each timestep
     """
     # Center the protein
     protein.center(type='backbone')
@@ -187,11 +199,10 @@ def apply_flow_to_protein(protein: Protein, time: float, output_dir: Path) -> Pr
     psi_sin_cos = protein.to_psi_sin_cos()
 
     n_residues = bb_rigid.trans.shape[0]
-    print(f"  Protein has {n_residues} residues")
-    print(f"  Original translation range: [{bb_rigid.trans.min():.2f}, {bb_rigid.trans.max():.2f}]")
+    print(f"Protein has {n_residues} residues")
+    print(f"Original translation range: [{bb_rigid.trans.min():.2f}, {bb_rigid.trans.max():.2f}]")
 
-    # === Apply R3 Flow to Translations ===
-    # Create R3 flow with standard Gaussian distribution
+    # === Setup flows ===
     alpha = LinearAlpha()
     beta = LinearBeta()
     distribution = GaussianDistribution(
@@ -199,32 +210,72 @@ def apply_flow_to_protein(protein: Protein, time: float, output_dir: Path) -> Pr
         cov=torch.eye(3) * 10.0  # Scale covariance for protein-sized structures
     )
     r3_flow = R3Flow(alpha, beta, distribution)
-
-    # Convert translations to torch tensor and apply flow
-    trans_tensor = torch.tensor(bb_rigid.trans, dtype=torch.float32)
-    noised_trans = r3_flow.noise_sample(trans_tensor, time)
-    noised_trans_np = noised_trans.detach().numpy()
-
-    print(f"  Noised translation range: [{noised_trans_np.min():.2f}, {noised_trans_np.max():.2f}]")
-
-    # === Apply SO(3) Flow to Rotations ===
     so3_flow = SO3Flow()
-    noised_rot = so3_flow.noise_sample(bb_rigid.rot, time)
 
-    # Create noised rigid transformation
-    noised_rigid = Rigid(noised_trans_np, noised_rot)
+    # === Pre-sample noise (same noise target for all timesteps for smooth trajectory) ===
+    trans_tensor = torch.tensor(bb_rigid.trans, dtype=torch.float32)
+    trans_noise = distribution.sample(n_residues)  # Sample translation noise once
+    rot_noise = so3_flow.sample_noise(n_residues)  # Sample rotation noise once
 
-    # Reconstruct backbone from noised frames
-    noised_backbone = calculate_backbone(noised_rigid, psi_sin_cos)
+    print(f"Generating {num_timesteps} timesteps...")
 
-    # Create protein from noised backbone
-    noised_protein = Protein.from_backbone(noised_backbone)
+    # Generate frames at each timestep
+    frames = []
+    time_steps = np.linspace(0.0, 1.0, num_timesteps)
 
-    return noised_protein
+    for i, t in enumerate(time_steps):
+        if (i + 1) % 50 == 0 or i == 0:
+            print(f"  Processing timestep {i + 1}/{num_timesteps} (t={t:.3f})")
+
+        # Interpolate translations: x_t = beta(t) * x_data + alpha(t) * noise
+        t_tensor = torch.tensor([t])
+        alpha_t = alpha(t_tensor)
+        beta_t = beta(t_tensor)
+        noised_trans = beta_t * trans_tensor + alpha_t * trans_noise
+        noised_trans_np = noised_trans.detach().numpy()
+
+        # Interpolate rotations using geodesic interpolation
+        noised_rot = so3_flow.interpolate(bb_rigid.rot, rot_noise, t)
+
+        # Create noised rigid transformation
+        noised_rigid = Rigid(noised_trans_np, noised_rot)
+
+        # Reconstruct backbone from noised frames
+        noised_backbone = calculate_backbone(noised_rigid, psi_sin_cos)
+
+        # Create protein and convert to AtomArray
+        noised_protein = Protein.from_backbone(noised_backbone)
+        frames.append(noised_protein.to_biotite())
+
+    return frames
+
+
+def save_trajectory(frames: list[AtomArray], output_path: Path) -> None:
+    """
+    Save a list of AtomArray frames as a multi-model PDB trajectory file.
+
+    Parameters:
+    -----------
+    frames : list[AtomArray]
+        List of AtomArray structures to save
+    output_path : Path
+        Path to output PDB file
+    """
+    # Stack frames into AtomArrayStack
+    trajectory = stack(frames)
+
+    # Save using PDBFile
+    pdb_file = PDBFile()
+    pdb_file.set_structure(trajectory)
+    pdb_file.write(str(output_path))
 
 
 def main():
     """Main function demonstrating the flow matching pipeline."""
+
+    # Set random seed for reproducibility
+    np.random.seed(42)
+    torch.manual_seed(42)
 
     # Setup paths
     project_root = Path(__file__).parent.parent
@@ -243,38 +294,28 @@ def main():
     protein.to_pdb(str(original_output))
     print(f"Saved original centered protein to: {original_output}")
 
-    # Apply flow at different time steps
-    time_steps = [0.0, 0.25, 0.5, 0.75, 1.0]
+    print("\n" + "="*60)
+    print(f"Generating Flow Trajectory with {NUM_TIMESTEPS} Timesteps")
+    print("="*60 + "\n")
+
+    # Generate trajectory
+    frames = generate_flow_trajectory(protein, NUM_TIMESTEPS)
+
+    # Save as single trajectory file
+    trajectory_output = output_dir / "flow_trajectory.pdb"
+    print(f"\nSaving trajectory to: {trajectory_output}")
+    save_trajectory(frames, trajectory_output)
 
     print("\n" + "="*60)
-    print("Applying Rotation and Translation Flow at Different Times")
-    print("="*60)
-
-    for t in time_steps:
-        print(f"\nTime t={t}:")
-
-        # Reload protein fresh for each time step
-        protein = Protein.from_pdb(str(pdb_path))
-
-        # Apply flow
-        noised_protein = apply_flow_to_protein(protein, t, output_dir)
-
-        # Save result
-        output_path = output_dir / f"noised_t{t:.2f}.pdb"
-        noised_protein.to_pdb(str(output_path))
-        print(f"  Saved to: {output_path}")
-
-    print("\n" + "="*60)
-    print("Flow Example Complete!")
+    print("Flow Trajectory Complete!")
     print("="*60)
     print(f"\nOutput files saved to: {output_dir}")
-    print("\nTo visualize the flow progression, open the PDB files in PyMOL or similar:")
-    print("  - original_centered.pdb: Original protein structure")
-    print("  - noised_t0.00.pdb: No noise (should match original backbone)")
-    print("  - noised_t0.25.pdb: 25% interpolation toward noise")
-    print("  - noised_t0.50.pdb: 50% interpolation toward noise")
-    print("  - noised_t0.75.pdb: 75% interpolation toward noise")
-    print("  - noised_t1.00.pdb: Full noise (random structure)")
+    print(f"  - original_centered.pdb: Original protein structure")
+    print(f"  - flow_trajectory.pdb: {NUM_TIMESTEPS}-frame trajectory (t=0 to t=1)")
+    print("\nTo visualize the trajectory in PyMOL:")
+    print("  1. Open flow_trajectory.pdb")
+    print("  2. Use the playback controls to animate through frames")
+    print("  3. Or use: cmd.mplay() to start animation")
 
 
 if __name__ == "__main__":
