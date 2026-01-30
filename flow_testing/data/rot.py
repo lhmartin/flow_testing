@@ -15,6 +15,9 @@ class Rotation:
     def invert(self) -> 'Rotation':
         return Rotation(self.rot_mats.transpose(0, 2, 1))
 
+    def copy(self):
+        return Rotation(self.rot_mats.copy())
+
     def apply(self, vectors: np.ndarray):
         """
         Rotate a batch of vectors by a batch of rotation matrices.
