@@ -106,7 +106,8 @@ class Protein:
         num_atms = self.atom_positions[self.atom_mask].shape[0]
         template = AtomArray(num_atms)
 
-        template.coord = self.atom_positions[self.atom_mask]
+        # round the coordinates to 4 decimal places
+        template.coord = np.round(self.atom_positions[self.atom_mask], 4)
         template.atom_name = self.atom_names[self.atom_mask]
 
         template.res_id = np.concatenate([[self.residue_ids[i]] * sum(self.atom_mask[i]) for i in range(len(self.residue_ids))])

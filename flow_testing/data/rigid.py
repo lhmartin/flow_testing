@@ -70,6 +70,9 @@ class Rigid:
         inverted_trans = -1 * inverted_rot.apply(self.trans)
         return Rigid(inverted_trans, inverted_rot)
 
+    def copy(self):
+        return Rigid(self.trans.copy(), self.rot.copy())
+
     def apply(self, vector: np.ndarray):
         """
         Apply the rigid transformation to a vector.
