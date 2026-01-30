@@ -5,7 +5,7 @@ import numpy as np
 
 from flow_testing.flow.base import Flow, Alpha, Beta, LinearAlpha, LinearBeta
 from flow_testing.data.rot import Rotation
-from flow_testing.data.so3_utils import random_rotation_matrices, so3_geodesic_interpolation
+from flow_testing.flow.rotation_utils import SO3Operations, GeodesicInterpolant
 
 
 class SO3Flow(Flow):
@@ -16,7 +16,7 @@ class SO3Flow(Flow):
     At t=1: returns random rotation (noise)
 
     This implements geodesic interpolation on the SO(3) manifold using
-    axis-angle representation and Rodrigues' formula.
+    the exp/log maps and Rodrigues' formula via rotation_utils.
     """
 
     def __init__(self, alpha: Alpha = None, beta: Beta = None):
@@ -36,8 +36,10 @@ class SO3Flow(Flow):
             beta = LinearBeta()
         self.alpha = alpha
         self.beta = beta
+        self._interpolant = GeodesicInterpolant()
 
-    def sample_noise(self, n: int) -> np.ndarray:
+    def sample_noise(self, n: int, device: torch.device = None,
+                     dtype: torch.dtype = torch.float32) -> torch.Tensor:
         """
         Sample random rotation matrices as noise target.
 
@@ -45,15 +47,19 @@ class SO3Flow(Flow):
         -----------
         n : int
             Number of rotation matrices to sample
+        device : torch.device, optional
+            Device for the tensors
+        dtype : torch.dtype, optional
+            Data type for the tensors
 
         Returns:
         --------
-        np.ndarray
-            Array of shape (n, 3, 3) containing random rotation matrices
+        torch.Tensor
+            Tensor of shape (n, 3, 3) containing random rotation matrices
         """
-        return random_rotation_matrices(n)
+        return SO3Operations.sample_uniform(n, device=device, dtype=dtype)
 
-    def interpolate(self, rotation: Rotation, noise_rotations: np.ndarray, time: float) -> Rotation:
+    def interpolate(self, rotation: Rotation, noise_rotations: torch.Tensor, time: float) -> Rotation:
         """
         Interpolate between data rotations and pre-sampled noise rotations.
 
@@ -61,7 +67,7 @@ class SO3Flow(Flow):
         -----------
         rotation : Rotation
             The original rotation matrices
-        noise_rotations : np.ndarray
+        noise_rotations : torch.Tensor
             Pre-sampled noise rotation matrices, shape (n, 3, 3)
         time : float
             Time parameter in [0, 1]. At t=0, returns original; at t=1, returns noise.
@@ -74,21 +80,18 @@ class SO3Flow(Flow):
         t_tensor = torch.tensor([time])
         alpha_t = float(self.alpha(t_tensor))
 
-        # Geodesic interpolation on SO(3)
-        interpolated = so3_geodesic_interpolation(
-            rotation.rot_mats,  # start (data)
-            noise_rotations,    # end (noise)
-            alpha_t             # interpolation parameter
-        )
+        # Convert rotation matrices to torch tensors
+        r0 = torch.tensor(rotation.rot_mats, dtype=noise_rotations.dtype)
+        r1 = noise_rotations
 
-        return Rotation(interpolated)
+        # Geodesic interpolation on SO(3) using rotation_utils
+        interpolated = self._interpolant.interpolate(r0, r1, alpha_t)
+
+        return Rotation(interpolated.numpy())
 
     def noise_sample(self, sample: torch.Tensor, time: float) -> Rotation:
         """
         Apply noise to rotation matrices using geodesic interpolation.
-
-        Note: This method signature matches the Flow base class but works with
-        numpy arrays internally due to the nature of SO(3) operations.
 
         Parameters:
         -----------
