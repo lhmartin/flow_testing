@@ -3,7 +3,7 @@ from flow_testing.data.rigid import Rigid
 from flow_testing.data.protein_constants import idealized_AA_positions, restype_1to3, restypes
 from flow_testing.data.rot import Rotation
 
-def psi_angles_to_rotation(psi_angles : np.ndarray):
+def psi_angles_to_rotation_matrix(psi_angles : np.ndarray):
     """
     Convert the psi angles to a rotation matrix.
     psi_angles is a 2D array of shape [n, 2]

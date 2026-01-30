@@ -7,6 +7,7 @@ import numpy as np
 
 from flow_testing.data.rigid import Rigid, matrix_to_rigids_local_to_global
 from flow_testing.data.rot import Rotation
+from flow_testing.data.protein_constants import DEFAULT_FRAMES
 
 @dataclass
 class Protein:
@@ -167,12 +168,8 @@ class Protein:
         
         # Default psi frame transformation (from DEFAULT_FRAMES frame 3)
         n_residues = self.atom_positions.shape[0]
-        default_rot = np.array([
-            [ 1.0000,  0.0000,  0.0000],
-            [ 0.0000, -1.0000,  0.0000],
-            [ 0.0000,  0.0000, -1.0000]
-        ])
-        default_trans = np.array([1.5260, 0.0000, 0.0000])
+        default_rot = DEFAULT_FRAMES['psi']['rot'] 
+        default_trans = DEFAULT_FRAMES['psi']['trans']
         
         default_psi_rigid = Rigid(
             np.tile(default_trans, (n_residues, 1)),
