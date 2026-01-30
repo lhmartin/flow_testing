@@ -1,6 +1,8 @@
 ## Constants for protein data
 # Some taken from https://github.com/google-deepmind/alphafold
+
 import numpy as np
+
 # Complete sequence of chain IDs supported by the PDB format.
 PDB_CHAIN_IDS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 PDB_MAX_CHAINS = len(PDB_CHAIN_IDS)  # := 62.
@@ -77,13 +79,20 @@ idealized_AA_positions = {
 
 backbone_atoms = ['N', 'CA', 'C']
 
-DEFAULT_FRAMES = {
-    'psi' : {
-        'rot': np.array([
-            [ 1.0000,  0.0000,  0.0000],
-            [ 0.0000, -1.0000,  0.0000],
-            [ 0.0000,  0.0000, -1.0000]
-        ]),
-        'trans': np.array([1.5260, 0.0000, 0.0000])
-    }
-}
+
+class DefaultFrames:
+    """Default rigid frame transformations for backbone construction.
+
+    These define the canonical transformation from backbone frame to psi frame,
+    used in torsion angle calculations and backbone reconstruction.
+    """
+
+    # Rotation component of default psi frame transformation (from DEFAULT_FRAMES frame 3)
+    PSI_ROT = np.array([
+        [1.0000, 0.0000, 0.0000],
+        [0.0000, -1.0000, 0.0000],
+        [0.0000, 0.0000, -1.0000]
+    ])
+
+    # Translation component of default psi frame transformation
+    PSI_TRANS = np.array([1.5260, 0.0000, 0.0000])
